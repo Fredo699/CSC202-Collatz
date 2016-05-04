@@ -37,9 +37,10 @@ int i;
 void main(void) {
   PLL_init();
   lcd_init();
-  SCI0_init(9600); // Channel to talk to ESP8266
-  while(1){
-    command = inchar0();
+  SCI0_init(9600); 
+  SCI1_init(9600); // Channel to talk to ESP8266
+  while(1){   
+    command = inchar1();
     switch (command) {
       case 'n':
         result = new_sequence();
@@ -52,21 +53,21 @@ unsigned long new_sequence(void) {
   unsigned long num = 0;
   char c;
   for(i = 0; i < 10; i++) {
-    c = inchar0();
+    c = inchar1();
     num += (c - '0') * pow(10, 9 - i);
-    outchar0(c);
+    outchar1(c);
   }
   
   if (num > MAX_LONG_VALUE){  
-    outchar0('e');            // Send error code 0x01 to ESP8266
-    outchar0(0x01);
+    outchar1('e');            // Send error code 0x01 to ESP8266
+    outchar1(0x01);
     return 0;
   }
   
   clear_lcd();
    
   while (num != 1){
-      if (num >= (MAX_LONG_VALUE / 3)){
+      if (num >= (MAX_LONG_VALUE / 3) && num % 2 == 1){
          set_lcd_addr(0);
          type_lcd("Sequence goes");
          set_lcd_addr(0x40);
@@ -79,10 +80,15 @@ unsigned long new_sequence(void) {
         num /= 2;
      else
         num = (num * 3) + 1;
-     ms_delay(750);
+     ms_delay(750); // to make sure we see what numbers we're getting
   }
   write_long_lcd(num); 
   return num;  
+}
+
+void send_string_newline_sci1(char* str) {
+   int i; for (i = 0; i < sizeof str; i++) outchar1(str[i]);
+   outchar1('\n');
 }
 
 unsigned long pow(int a, int b) {
