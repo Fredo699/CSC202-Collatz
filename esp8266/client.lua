@@ -1,0 +1,7 @@
+wifi.setphymode(wifi.PHYMODE_N)
+wifi.setmode(wifi.STATION)
+wifi.sta.config('jon phone', '')
+wifi.sta.connect()
+conn = net.createConnection(net.TCP, 0)
+conn:on("receive", function(sck, c) print('n' .. c) end)
+conn:connect(12345, "192.168.43.159")
