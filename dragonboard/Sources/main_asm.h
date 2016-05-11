@@ -92,6 +92,8 @@ void  clear_RTI_flag(void);
 void  RTI_disable(void);
 void  SCI0_int_init(int); 
 char  read_SCI0_Rx(void);
+void  SCI1_int_init(int);
+char  read_SCI1_Rx(void);
 void  ptrain6_init(void);
 void  ptrain6(int,int);
 void  sound_init(void);

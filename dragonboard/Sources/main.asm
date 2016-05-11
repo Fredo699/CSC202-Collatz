@@ -33,7 +33,8 @@
             XDEF SS0_HI, SS1_HI, SS2_HI
             XDEF SS0_LO, SS1_LO, SS2_LO
             XDEF RTI_init, clear_RTI_flag, RTI_disable
-            XDEF SCI0_int_init, read_SCI0_Rx             
+            XDEF SCI0_int_init, read_SCI0_Rx
+            XDEF SCI1_int_init, read_SCI1_Rx             
             XDEF ptrain6_init, ptrain6
             XDEF sound_init, sound_on, sound_off, tone
             XDEF HILO1_init, HILOtimes1
@@ -1136,6 +1137,27 @@ SCI0_int_init:
 read_SCI0_Rx:
             LDAA  SCI0SR1						; clears RDRF flag
             LDAB  SCI0DRL						; return data
+            RTS
+
+;   SCI1 receive interrupt setup 9600 baud            
+;   void SCI1_int_init(int)
+SCI1_int_init: 												
+            CLR   SCI1CR1
+            MOVB  #$2C, SCI1CR2			;enable TE, RE, RX int
+            TFR   D,X
+            LDY   #$0016              ; 24 mhz
+            LDD   #$E360
+            EDIV
+            STY   SCI1BDH
+            CLI                     ;enable interrupts
+            RTS
+
+
+;   Read Rx byte
+;   char read_SCI1_Rx()
+read_SCI1_Rx:
+            LDAA  SCI1SR1						; clears RDRF flag
+            LDAB  SCI1DRL						; return data
             RTS
 
 ;  ptrain6_init()

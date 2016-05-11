@@ -4,8 +4,12 @@
 #pragma LINK_INFO DERIVATIVE "mc9s12dg256b"
 
 #include "main_asm.h" /* interface to the assembly module */
+#include "queue.h"
+#include "btree.h"
 
 #define MAX_LONG_VALUE 4294967295
+
+#define NULL ((void *) 0)
 
 unsigned long new_sequence(void);
 unsigned long pow(int a, int b);
@@ -31,19 +35,43 @@ char command; // Command received from ESP8266
    *                  (0x01) -> Number exceeds MAX_LONG_VALUE
    */
 
-unsigned long result=0; // Result after computing sequence.
-int i;
+unsigned long result; // Result after computing sequence.
+int i, display_mode;
+treeNode *searchtab_root;
 
+void set_rgb_led(char r, char g, char b);
+void interrupt 21 comm_handler(){
+     qstore(read_SCI1_Rx());
+}
+
+void interrupt 7 async_handler(){
+     display_mode = PTH & 1; // Get the bottom bit of PORTH
+}
 void main(void) {
   PLL_init();
   lcd_init();
   SCI0_init(9600); 
-  SCI1_init(9600); // Channel to talk to ESP8266
-  while(1){   
-    command = inchar1();
+  SCI1_int_init(9600); // Channel to talk to ESP8266
+  motor0_init(); // These functions actually control PWM outputs
+  motor1_init(); // We use them to run the RGB LED.
+  motor2_init();
+  initq();
+  
+  searchtab_root = NULL;
+  
+  DDRH = 0; // PORTH is an input.
+  result = 0;
+  while(1){
+    set_rgb_led(0x00, 0xff, 0x00); // Set LED to green, to indicate we're ready
+    command = '\0';   
+    while(qempty());
+    command = getq();
+    
     switch (command) {
       case 'n':
+        set_rgb_led(0x80, 0x00, 0x40);
         result = new_sequence();
+        
     }
     outchar0(result);
   }
@@ -53,9 +81,9 @@ unsigned long new_sequence(void) {
   unsigned long num = 0;
   char c;
   for(i = 0; i < 10; i++) {
-    c = inchar1();
+    while(qempty());
+    c = getq();
     num += (c - '0') * pow(10, 9 - i);
-    outchar1(c);
   }
   
   if (num > MAX_LONG_VALUE){  
@@ -67,6 +95,9 @@ unsigned long new_sequence(void) {
   clear_lcd();
    
   while (num != 1){
+      // the only way we'll go over MAX_LONG_VALUE is if we have an odd number
+      // that is greater than 1/3 the max long value.
+      
       if (num >= (MAX_LONG_VALUE / 3) && num % 2 == 1){
          set_lcd_addr(0);
          type_lcd("Sequence goes");
@@ -76,14 +107,30 @@ unsigned long new_sequence(void) {
       }
       set_lcd_addr(0);
       write_long_lcd(num);
+      
+      if (bt_find(searchtab_root, num)){
+          type_lcd("Short circuit:");
+          set_lcd_addr(0x40);
+          type_lcd("Sequence already computed.");
+          break;
+      }
+      
+      searchtab_root = bt_insert(searchtab_root, num);
+      
      if (num % 2 == 0)
         num /= 2;
      else
         num = (num * 3) + 1;
-     ms_delay(750); // to make sure we see what numbers we're getting
+     if (display_mode) ms_delay(750); // to make sure we see what numbers we're getting
   }
   write_long_lcd(num); 
   return num;  
+}
+
+void set_rgb_led(char r, char g, char b){
+  motor0(r);
+  motor1(g);
+  motor2(b);
 }
 
 void send_string_newline_sci1(char* str) {
