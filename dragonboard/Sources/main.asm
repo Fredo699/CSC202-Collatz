@@ -108,7 +108,7 @@ keycodes:
 asm_main:
 
 PLL_init:
-          movb    #$05,SYNR         ;PLLOSC = 48 MHz
+          movb    #$02,SYNR         ;PLLOSC = 48 MHz
           movb    #$00,REFDV
           clr     CLKSEL
           movb    #$F1,PLLCTL

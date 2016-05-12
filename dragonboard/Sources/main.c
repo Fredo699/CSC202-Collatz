@@ -9,8 +9,6 @@
 
 #define MAX_LONG_VALUE 4294967295
 
-#define NULL ((void *) 0)
-
 unsigned long new_sequence(void);
 unsigned long pow(int a, int b);
 
@@ -38,15 +36,35 @@ char command; // Command received from ESP8266
 unsigned long result; // Result after computing sequence.
 int i, display_mode;
 treeNode *searchtab_root;
+char status;           // Current status of dragonboard
 
 void set_rgb_led(char r, char g, char b);
+
 void interrupt 21 comm_handler(){
      qstore(read_SCI1_Rx());
 }
 
 void interrupt 7 async_handler(){
-     display_mode = PTH & 1; // Get the bottom bit of PORTH
+     display_mode = ~PTH & 1; // Get bit 0 of PORTH
+     
+     switch (status){
+      case 'i':
+        set_rgb_led(0x00, 0xff, 0x00);
+        break;
+      case 'w':
+        set_rgb_led(0x80, 0x00, 0x40);
+        break;
+      case 'e':
+        set_rgb_led(0xff, 0x00, 0x00);
+        break;
+      default:
+        set_rgb_led(0xff, 0xff, 0xff);
+        break;
+     }
+     
+     clear_RTI_flag();
 }
+
 void main(void) {
   PLL_init();
   lcd_init();
@@ -55,21 +73,22 @@ void main(void) {
   motor0_init(); // These functions actually control PWM outputs
   motor1_init(); // We use them to run the RGB LED.
   motor2_init();
-  initq();
+  RTI_init();
+  SW_enable();
   
-  searchtab_root = NULL;
+  initq();
   
   DDRH = 0; // PORTH is an input.
   result = 0;
+  status = 'i';
   while(1){
-    set_rgb_led(0x00, 0xff, 0x00); // Set LED to green, to indicate we're ready
     command = '\0';   
     while(qempty());
     command = getq();
     
     switch (command) {
       case 'n':
-        set_rgb_led(0x80, 0x00, 0x40);
+        status = 'w';
         result = new_sequence();
         
     }
@@ -86,12 +105,6 @@ unsigned long new_sequence(void) {
     num += (c - '0') * pow(10, 9 - i);
   }
   
-  if (num > MAX_LONG_VALUE){  
-    outchar1('e');            // Send error code 0x01 to ESP8266
-    outchar1(0x01);
-    return 0;
-  }
-  
   clear_lcd();
    
   while (num != 1){
@@ -99,6 +112,7 @@ unsigned long new_sequence(void) {
       // that is greater than 1/3 the max long value.
       
       if (num >= (MAX_LONG_VALUE / 3) && num % 2 == 1){
+         status = 'e';
          set_lcd_addr(0);
          type_lcd("Sequence goes");
          set_lcd_addr(0x40);
@@ -107,23 +121,14 @@ unsigned long new_sequence(void) {
       }
       set_lcd_addr(0);
       write_long_lcd(num);
-      
-      if (bt_find(searchtab_root, num)){
-          type_lcd("Short circuit:");
-          set_lcd_addr(0x40);
-          type_lcd("Sequence already computed.");
-          break;
-      }
-      
-      searchtab_root = bt_insert(searchtab_root, num);
-      
      if (num % 2 == 0)
         num /= 2;
      else
         num = (num * 3) + 1;
      if (display_mode) ms_delay(750); // to make sure we see what numbers we're getting
   }
-  write_long_lcd(num); 
+  write_long_lcd(num);
+  status = 'i'; 
   return num;  
 }
 
