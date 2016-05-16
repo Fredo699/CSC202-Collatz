@@ -5,7 +5,6 @@
 
 #include "main_asm.h" /* interface to the assembly module */
 #include "queue.h"
-#include "btree.h"
 
 #define MAX_LONG_VALUE 4294967295
 #define BUFF_SIZE 256
@@ -36,9 +35,7 @@ char command; // Command received from ESP8266
 
 int result; // Result after computing sequence.
 int i, display_mode, getline_timeout, at_timeout;
-treeNode *searchtab_root;
-char c, status; 
-char newline_buff[BUFF_SIZE];
+char c, status;
 void set_rgb_led(char r, char g, char b);
 void send_string_newline_sci1(char* str);
 void send_at_command_sci1(char* str);
@@ -93,6 +90,8 @@ void main(void) {
   DDRH = 0; // PORTH is an input.
   result = 0;
   status = 'b';
+  
+  // Populate binary search tree:
 
   set_lcd_addr(0);  
   send_at_command_sci1("ATE0");  // change to ATE1 for debug
@@ -130,35 +129,45 @@ void main(void) {
 }
 
 int new_sequence(void) {
-  unsigned long num = 0;
+  unsigned long num = 0, newnum = 0;
   char c;
   for(i = 0; i < 10; i++) {
     while(qempty());
     c = getq();
-    num += (c - '0') * pow(10, 9 - i);
-  }
-  
-  clear_lcd();
-   
-  while (num != 1){
-      // the only way we'll go over MAX_LONG_VALUE is if we have an odd number
-      // that is greater than 1/3 the max long value.
-      
-      if (num >= (MAX_LONG_VALUE / 3) && num % 2 == 1){
+    newnum = (c - '0') * pow(10, 9 - i);
+    if (num + newnum < num) { // Check for rollover
          status = 'e';
          set_lcd_addr(0);
          type_lcd("Sequence goes");
          set_lcd_addr(0x40);
          type_lcd("above 2^32!");
-         return 0;
-      }
+         return -1;
+    }
+    
+    num += newnum; // we passed test
+  }
+  
+  clear_lcd();
+   
+  while (num != 1){
+      
       set_lcd_addr(0);
       write_long_lcd(num);
      if (num % 2 == 0)
         num /= 2;
-     else
-        num = (num * 3) + 1;
-     if (display_mode) ms_delay(750); // to make sure we see what numbers we're getting
+     else{
+        newnum = (num * 3) + 1;
+        if (newnum < num){ // Check for rollover.
+          status = 'e';
+          set_lcd_addr(0);
+          type_lcd("Sequence goes");
+          set_lcd_addr(0x40);
+          type_lcd("above 2^32!");
+          return -1;
+        }
+        num = newnum; // we passed test
+     }
+     if (display_mode) ms_delay(750);// to make sure we see what numbers we're getting
   }
   write_long_lcd(num);
   status = 'i'; 
