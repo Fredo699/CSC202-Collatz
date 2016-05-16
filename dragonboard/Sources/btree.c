@@ -4,11 +4,10 @@ treeNode *bt_insert(treeNode *node,unsigned long data)
 {
         if(node==NULL)
         {
-                treeNode *temp;
-                temp = (treeNode *)malloc(sizeof(treeNode));
-                temp -> data = data;
-                temp -> left = temp -> right = NULL;
-                return temp;
+                treeNode temp;
+                temp.data = data;
+                temp.left = temp.right = NULL;
+                return &temp;
         }
 
         if(data >(node->data))

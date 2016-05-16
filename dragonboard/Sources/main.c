@@ -8,8 +8,9 @@
 #include "btree.h"
 
 #define MAX_LONG_VALUE 4294967295
+#define BUFF_SIZE 256
 
-unsigned long new_sequence(void);
+int new_sequence(void);
 unsigned long pow(int a, int b);
 
 char command; // Command received from ESP8266
@@ -33,31 +34,42 @@ char command; // Command received from ESP8266
    *                  (0x01) -> Number exceeds MAX_LONG_VALUE
    */
 
-unsigned long result; // Result after computing sequence.
-int i, display_mode;
+int result; // Result after computing sequence.
+int i, display_mode, getline_timeout, at_timeout;
 treeNode *searchtab_root;
-char status;           // Current status of dragonboard
-
+char c, status; 
+char newline_buff[BUFF_SIZE];
 void set_rgb_led(char r, char g, char b);
+void send_string_newline_sci1(char* str);
+void send_at_command_sci1(char* str);
+void empty_queue(void);
 
-void interrupt 21 comm_handler(){
+void interrupt 21 comm_handler(void){
      qstore(read_SCI1_Rx());
 }
 
-void interrupt 7 async_handler(){
+void interrupt 7 async_handler(void){
      display_mode = ~PTH & 1; // Get bit 0 of PORTH
-     
+     if (getline_timeout > 0) --getline_timeout;
+     if (at_timeout > 0) --at_timeout;
+    
      switch (status){
-      case 'i':
+      case 'i':                       // IDLE
         set_rgb_led(0x00, 0xff, 0x00);
         break;
-      case 'w':
+      case 'c':                       // COMMUNICATING
+        set_rgb_led(0xff, 0xff, 0x00);
+        break;
+      case 'w':                       // WORKING
         set_rgb_led(0x80, 0x00, 0x40);
         break;
-      case 'e':
+      case 'e':                       // ERROR
         set_rgb_led(0xff, 0x00, 0x00);
         break;
-      default:
+      case 'b':                       // BOOTUP
+        set_rgb_led(0x00, 0x00, 0xff);
+        break;
+      default:                        // ?
         set_rgb_led(0xff, 0xff, 0xff);
         break;
      }
@@ -80,7 +92,25 @@ void main(void) {
   
   DDRH = 0; // PORTH is an input.
   result = 0;
+  status = 'b';
+
+  set_lcd_addr(0);  
+  send_at_command_sci1("ATE0");  // change to ATE1 for debug
+  
   status = 'i';
+  
+  // Establish connection to server.
+  send_at_command_sci1("AT+CWMODE=1");  // Set ESP to station mode
+  
+  send_at_command_sci1("AT+CIPMODE=0"); // Set ESP to normal transmission mode
+  
+  send_at_command_sci1("AT+CIPMUX=0");  // Set ESP to single-connection mode 
+  
+  send_at_command_sci1("AT+CWJAP=\"Freynet\",\"\""); // Connect to network
+  
+  send_at_command_sci1("AT+CIPSTART=\"TCP\",\"fpf3.net\",12345"); // connect to server
+
+  
   while(1){
     command = '\0';   
     while(qempty());
@@ -90,13 +120,16 @@ void main(void) {
       case 'n':
         status = 'w';
         result = new_sequence();
+        send_at_command_sci1("AT+CIPSTART=\"TCP\",\"fpf3.net\",12345"); // connect to server
+
+        break;
         
     }
     outchar0(result);
   }
 }
 
-unsigned long new_sequence(void) {
+int new_sequence(void) {
   unsigned long num = 0;
   char c;
   for(i = 0; i < 10; i++) {
@@ -132,6 +165,13 @@ unsigned long new_sequence(void) {
   return num;  
 }
 
+void empty_queue(){
+  while (!qempty())
+    c = getq();
+  
+  c = '\0';
+}
+
 void set_rgb_led(char r, char g, char b){
   motor0(r);
   motor1(g);
@@ -139,8 +179,42 @@ void set_rgb_led(char r, char g, char b){
 }
 
 void send_string_newline_sci1(char* str) {
-   int i; for (i = 0; i < sizeof str; i++) outchar1(str[i]);
+   int i;
+   status = 'c';
+   for (i = 0; str[i] != '\0'; i++) outchar1(str[i]);
    outchar1('\n');
+   status = 'i';
+}
+
+void send_at_command_sci1(char* str){
+  long i;
+  status = 'c';
+  for (i = 0; str[i] != '\0'; i++) outchar1(str[i]);
+  outchar1('\n');
+
+  at_timeout = 10 * 100; // set at_timeout to ~10 sec  
+  while(at_timeout){
+    while(qempty() && at_timeout);
+    c = getq();
+    if (c == 'O'){
+      while(qempty() && at_timeout);
+      c = getq();
+      if (c == 'K')
+        break;
+      else
+        continue;
+    }
+  }
+  
+  if (at_timeout)
+    status = 'i';
+  else{
+    status = 'e';
+    set_lcd_addr(0);
+    type_lcd("writing timed");
+    set_lcd_addr(0x40);
+    type_lcd("out.");
+  }
 }
 
 unsigned long pow(int a, int b) {
