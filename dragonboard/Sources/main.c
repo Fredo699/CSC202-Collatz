@@ -40,6 +40,7 @@ void set_rgb_led(char r, char g, char b);
 void send_string_newline_sci1(char* str);
 void send_at_command_sci1(char* str);
 void empty_queue(void);
+void reset_module(void);
 
 void interrupt 21 comm_handler(void){
      qstore(read_SCI1_Rx());
@@ -63,6 +64,7 @@ void interrupt 7 async_handler(void){
         break;
       case 'e':                       // ERROR
         set_rgb_led(0xff, 0x00, 0x00);
+        //while(1); // <--- uncomment if you want to halt on errors.
         break;
       case 'b':                       // BOOTUP
         set_rgb_led(0x00, 0x00, 0xff);
@@ -94,7 +96,8 @@ void main(void) {
   
   // Populate binary search tree:
 
-  set_lcd_addr(0);  
+  set_lcd_addr(0);
+    
   send_at_command_sci1("ATE0");  // change to ATE1 for debug
   
   status = 'i';
@@ -107,7 +110,7 @@ void main(void) {
   
   send_at_command_sci1("AT+CIPMUX=0");  // Set ESP to single-connection mode 
   
-  send_at_command_sci1("AT+CWJAP=\"jon phone\",\"\""); // Connect to network
+  send_at_command_sci1("AT+CWJAP=\"Freynet\",\"\""); // Connect to network
   
   send_at_command_sci1("AT+CIPSTART=\"TCP\",\"fpf3.net\",12345"); // connect to server
 
@@ -121,6 +124,7 @@ void main(void) {
       case 'n':
         status = 'w';
         result = new_sequence();
+        ms_delay(500); // If we finish too quickly, we open a connection the ESP thinks is already open, and it breaks.
         send_at_command_sci1("AT+CIPSTART=\"TCP\",\"fpf3.net\",12345"); // connect to server
 
         break;
@@ -148,8 +152,6 @@ int new_sequence(void) {
     
     num += newnum; // we passed test
   }
-  
-  clear_lcd();
    
   while (num != 1){
       
@@ -216,6 +218,10 @@ void send_at_command_sci1(char* str){
         continue;
     }
   }
+  
+  
+  // XXX: maybe clearing out nXXXXXXXXXX? 
+  //empty_queue(); // clear the queue of any part of the message we may have ignored.
   
   if (at_timeout)
     status = 'i';
