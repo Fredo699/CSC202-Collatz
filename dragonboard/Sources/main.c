@@ -34,7 +34,7 @@ char command; // Command received from ESP8266
    */
 
 int result; // Result after computing sequence.
-int i, display_mode, getline_timeout, at_timeout;
+int i, display_mode, slow_mode, getline_timeout, at_timeout;
 char c, status;
 void set_rgb_led(char r, char g, char b);
 void send_string_newline_sci1(char* str);
@@ -46,7 +46,8 @@ void interrupt 21 comm_handler(void){
 }
 
 void interrupt 7 async_handler(void){
-     display_mode = ~PTH & 1; // Get bit 0 of PORTH
+     display_mode = ~PTH & 2; // get bit 1 of PORTH
+     slow_mode = ~PTH & 1; // Get bit 0 of PORTH
      if (getline_timeout > 0) --getline_timeout;
      if (at_timeout > 0) --at_timeout;
     
@@ -99,13 +100,14 @@ void main(void) {
   status = 'i';
   
   // Establish connection to server.
+  
   send_at_command_sci1("AT+CWMODE=1");  // Set ESP to station mode
   
   send_at_command_sci1("AT+CIPMODE=0"); // Set ESP to normal transmission mode
   
   send_at_command_sci1("AT+CIPMUX=0");  // Set ESP to single-connection mode 
   
-  send_at_command_sci1("AT+CWJAP=\"Freynet\",\"\""); // Connect to network
+  send_at_command_sci1("AT+CWJAP=\"jon phone\",\"\""); // Connect to network
   
   send_at_command_sci1("AT+CIPSTART=\"TCP\",\"fpf3.net\",12345"); // connect to server
 
@@ -152,7 +154,7 @@ int new_sequence(void) {
   while (num != 1){
       
       set_lcd_addr(0);
-      write_long_lcd(num);
+      if (display_mode) write_long_lcd(num);
      if (num % 2 == 0)
         num /= 2;
      else{
@@ -167,9 +169,9 @@ int new_sequence(void) {
         }
         num = newnum; // we passed test
      }
-     if (display_mode) ms_delay(750);// to make sure we see what numbers we're getting
+     if (slow_mode) ms_delay(750);// to make sure we see what numbers we're getting
   }
-  write_long_lcd(num);
+  if (display_mode) write_long_lcd(num);
   status = 'i'; 
   return num;  
 }
